@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import os, os.path
+import time
 from subprocess import call, check_call
 from tempfile import mkdtemp
 
@@ -29,6 +30,23 @@ def main():
 
         partnum = raw_input('Desired partition number? ')
         partdev = '{0}p{1}'.format(nbd_dev, partnum)
+        kpartx = False
+        if not os.path.exists(partdev):
+            check_call(['kpartx', '-a', nbd_dev])
+            if not os.path.exists(partdev):
+                partdev = "/dev/mapper/{0}p{1}".format(os.path.basename(nbd_dev), partnum)
+                wait = 1
+                step = 0.1
+                while not os.path.exists(partdev):
+                    time.sleep(step)
+                    wait -= step
+                    if wait <= 0:
+                        break
+                if not os.path.exists(partdev):
+                    print '{0} not exists!'.format(partdev)
+                    check_call(['kpartx', '-d', nbd_dev])
+                else:
+                    kpartx = True
 
         # Create the mountpoint
         mountpoint = mkdtemp()
@@ -51,6 +69,8 @@ def main():
         finally:
             # Remove the mountpoint
             os.rmdir(mountpoint)
+            if kpartx:
+                check_call(['kpartx', '-d', nbd_dev])
 
     finally:
         # Disconnect the block device
